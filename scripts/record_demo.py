@@ -44,29 +44,32 @@ def record() -> None:
         )
         page = ctx.new_page()
 
-        # 0.0 – 1.5s : trace list lands
+        # 0.0 – 1.3s : trace list lands
         page.goto(BASE + "/", wait_until="networkidle")
-        time.sleep(1.5)
+        time.sleep(1.3)
 
-        # 1.5 – 2.3s : click the 11-step amazing.com trace
+        # 1.3 – 2.1s : click the 11-step amazing.com trace
         for a in page.query_selector_all("tr a[href^='/traces/']"):
             if "amazing.com" in a.inner_text():
                 a.click()
                 break
-        page.wait_for_timeout(900)
+        page.wait_for_timeout(800)
 
-        # 2.3 – 4.2s : step through with j (six presses)
+        # 2.1 – 3.8s : step through with j (six presses). Focus body first
+        # so the keydown handler on window actually receives our synthetic keys.
+        page.locator("body").click(position={"x": 400, "y": 400})
         for _ in range(6):
             page.keyboard.press("j")
-            page.wait_for_timeout(280)
+            page.wait_for_timeout(260)
 
-        # 4.2 – 5.4s : switch to DOM diff (key 2), let it render
-        page.keyboard.press("2")
-        page.wait_for_timeout(1200)
+        # 3.8 – 5.3s : switch to DOM diff via explicit button click — headless
+        # key events for "2" don't always bubble to the window listener.
+        page.get_by_role("button", name="DOM Diff").click()
+        page.wait_for_timeout(1500)
 
-        # 5.4 – 6.0s : switch to LLM (key 4) and linger
-        page.keyboard.press("4")
-        page.wait_for_timeout(600)
+        # 5.3 – 6.2s : switch to LLM Calls
+        page.get_by_role("button", name="LLM Calls").click()
+        page.wait_for_timeout(900)
 
         ctx.close()  # flushes the video
         browser.close()
