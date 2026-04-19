@@ -42,7 +42,7 @@ function TraceList() {
   });
 
   return (
-    <div className="max-w-[1200px] mx-auto px-6 py-8">
+    <div className="max-w-[1400px] mx-auto px-6 py-8">
       <div className="flex items-baseline justify-between mb-6">
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight">Traces</h1>

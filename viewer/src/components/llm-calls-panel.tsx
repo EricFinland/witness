@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Step, LLMCall } from "@/lib/types";
 import { cn, formatCost, formatLatency, formatTokens } from "@/lib/utils";
 import { ChevronRight, X } from "lucide-react";
@@ -61,6 +61,13 @@ export function LLMCallsPanel({ step }: { step: Step }) {
 }
 
 function CallDialog({ call, onClose }: { call: LLMCall; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   return (
     <div
       className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-8"

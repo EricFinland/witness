@@ -28,7 +28,10 @@ export function formatLatency(ms: number): string {
 }
 
 export function formatRelative(iso: string): string {
-  const then = new Date(iso).getTime();
+  // SQLite drops tzinfo, so the API returns naive ISO strings. Treat them as
+  // UTC: if there's no explicit offset or "Z", append "Z" before parsing.
+  const normalized = /[zZ]$|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + "Z";
+  const then = new Date(normalized).getTime();
   const now = Date.now();
   const diff = Math.max(0, now - then);
   const s = Math.floor(diff / 1000);
@@ -39,7 +42,7 @@ export function formatRelative(iso: string): string {
   if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
   if (d < 30) return `${d}d ago`;
-  return new Date(iso).toISOString().slice(0, 10);
+  return new Date(normalized).toISOString().slice(0, 10);
 }
 
 const ACTION_ICONS: Record<string, string> = {

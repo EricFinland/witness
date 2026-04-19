@@ -24,14 +24,17 @@ export function Timeline({ steps, selectedIdx, onSelect }: Props) {
       </div>
       <ul>
         {steps.map((s) => {
-          const pct = Math.min(100, Math.max(6, (s.latency_ms / maxLatency) * 100));
+          // True-proportional scaling: no artificial floor. A 100ms step next
+          // to a 3000ms step should look 30x narrower. Use a 1px minimum via
+          // CSS so zero-latency steps don't completely vanish.
+          const pct = Math.max(1, (s.latency_ms / maxLatency) * 100);
           const active = s.idx === selectedIdx;
           return (
             <li key={s.id}>
               <button
                 onClick={() => onSelect(s.idx)}
                 className={cn(
-                  "w-full text-left px-5 py-2.5 flex flex-col gap-1.5 border-l-2 transition-colors",
+                  "w-full text-left px-5 py-2.5 flex flex-col gap-2 border-l-2 transition-colors",
                   active
                     ? "bg-bg-muted border-accent"
                     : "border-transparent hover:bg-bg-muted/60",
@@ -58,13 +61,13 @@ export function Timeline({ steps, selectedIdx, onSelect }: Props) {
                     {formatLatency(s.latency_ms)}
                   </span>
                 </div>
-                <div className="relative h-1 bg-bg-subtle rounded-full overflow-hidden ml-9">
+                <div className="relative h-[3px] bg-border rounded-full overflow-hidden ml-9">
                   <div
                     className={cn(
-                      "h-full rounded-full",
-                      s.error ? "bg-danger" : active ? "bg-accent" : "bg-fg-subtle/40",
+                      "h-full rounded-full transition-[width]",
+                      s.error ? "bg-danger" : active ? "bg-accent" : "bg-accent/40",
                     )}
-                    style={{ width: `${pct}%` }}
+                    style={{ width: `${pct}%`, minWidth: "1px" }}
                   />
                 </div>
               </button>

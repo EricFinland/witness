@@ -70,16 +70,17 @@ body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Ro
 .gmail .row .sender { width: 180px; }
 .gmail .row .subj { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gmail .row .time { width: 80px; text-align: right; color: #5f6368; }
-.shop { font-family: Inter, sans-serif; background: #fff; }
+.shop { font-family: Inter, sans-serif; background: #fff; position: relative; min-height: 100vh; }
 .shop .hdr { background: #146eb4; color: white; padding: 10px 20px; display: flex; gap: 24px; align-items: center; font-size: 14px; }
 .shop .product { display: flex; gap: 30px; padding: 32px; }
-.shop .product img { width: 320px; height: 320px; background: #eee; border-radius: 8px; display:flex;align-items:center;justify-content:center;color:#888;}
-.shop .product h1 { font-size: 22px; margin: 0 0 12px 0; font-weight: 600; }
+.shop .product .thumb { width: 320px; height: 320px; background: #f3f3f3; border: 1px solid #e0e0e0; border-radius: 8px; display:flex;align-items:center;justify-content:center;padding: 24px; }
+.shop .product h1 { font-size: 22px; margin: 0 0 12px 0; font-weight: 600; color: #111; }
 .shop .product .price { color: #B12704; font-size: 28px; font-weight: 500; }
 .shop .product .cta { margin-top: 16px; display: flex; gap: 10px; }
-.shop .product .btn { background: #ffd814; padding: 10px 22px; border-radius: 999px; font-weight: 500; font-size: 13px; cursor: pointer; border: 1px solid #fcd200; }
+.shop .product .btn { background: #ffd814; padding: 10px 22px; border-radius: 999px; font-weight: 500; font-size: 13px; cursor: pointer; border: 1px solid #fcd200; color: #111; }
 .shop .product .btn.primary { background: #ffa41c; border-color: #ff8f00; }
-.shop .toast { position: fixed; top: 20px; right: 20px; background: #067d62; color: white; padding: 12px 16px; border-radius: 8px; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,0.18); }
+/* Toast sits inside the shop chrome, not fixed to viewport, so it never clips. */
+.shop .toast { position: absolute; top: 72px; right: 24px; background: #067d62; color: white; padding: 10px 14px; border-radius: 8px; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,0.18); z-index: 2; }
 """
 
 
@@ -188,7 +189,16 @@ def render_shop(in_cart: bool = False, toast: bool = False) -> str:
     <div style="margin-left:auto;">Hello, Eric · Cart ({1 if in_cart else 0})</div>
   </div>
   <div class="product">
-    <img alt="product" src=""><!-- gray placeholder --></img>
+    <div class="thumb">
+      <svg viewBox="0 0 200 140" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;">
+        <rect x="10" y="20" width="180" height="100" rx="6" fill="#2a2a2a"/>
+        <circle cx="100" cy="70" r="36" fill="#1a1a1a" stroke="#444" stroke-width="3"/>
+        <circle cx="100" cy="70" r="22" fill="#0a0a0a"/>
+        <circle cx="106" cy="64" r="4" fill="#555"/>
+        <rect x="70" y="14" width="60" height="10" rx="3" fill="#1a1a1a"/>
+        <rect x="160" y="28" width="16" height="6" rx="2" fill="#c00"/>
+      </svg>
+    </div>
     <div>
       <h1>Nikon Z7 II Mirrorless Camera (Body Only)</h1>
       <div style="font-size:13px;color:#565959;">by Nikon · 4.6 ★★★★★ (1,204 ratings)</div>
@@ -291,6 +301,11 @@ def _browser_screenshot(browser: Browser, html: str) -> bytes:
     page: Page = ctx.new_page()
     try:
         page.set_content(html, wait_until="domcontentloaded")
+        # Wait for images / fonts / etc. so the PNG isn't captured mid-load.
+        try:
+            page.wait_for_load_state("networkidle", timeout=3000)
+        except Exception:
+            pass
         return page.screenshot(full_page=False, type="png")
     finally:
         ctx.close()
@@ -618,15 +633,17 @@ def main() -> None:
     now = datetime.now(timezone.utc)
     print(f"Seeding into {storage.BASE_DIR} …")
 
+    # Spread timestamps so the list reads as "recent activity" instead of
+    # a demo dump: now-ish, 14m, 2h, 1d, 3d.
     ids: list[tuple[str, str]] = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         try:
-            ids.append(("short", build_hn_short(browser, now - timedelta(minutes=3))))
-            ids.append(("long", build_shop_long(browser, now - timedelta(hours=1, minutes=12))))
-            ids.append(("error", build_gmail_error(browser, now - timedelta(hours=4))))
             ids.append(("running", build_running(browser, now - timedelta(seconds=45))))
-            ids.append(("expensive", build_expensive(browser, now - timedelta(days=1))))
+            ids.append(("short", build_hn_short(browser, now - timedelta(minutes=14))))
+            ids.append(("long", build_shop_long(browser, now - timedelta(hours=2, minutes=18))))
+            ids.append(("error", build_gmail_error(browser, now - timedelta(days=1, hours=6))))
+            ids.append(("expensive", build_expensive(browser, now - timedelta(days=3, hours=2))))
         finally:
             browser.close()
 

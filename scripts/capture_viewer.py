@@ -11,6 +11,19 @@ OUT.mkdir(parents=True, exist_ok=True)
 BASE = "http://127.0.0.1:7842"
 
 
+def _click_tab(page, label: str) -> None:
+    btn = page.get_by_role("button", name=label, exact=False).first
+    btn.click()
+    page.wait_for_timeout(450)
+
+
+def _select_step(page, idx: int) -> None:
+    btns = page.query_selector_all("div.w-\\[320px\\] ul li button")
+    if idx < len(btns):
+        btns[idx].click()
+        page.wait_for_timeout(400)
+
+
 def main() -> None:
     trace_id = sys.argv[1] if len(sys.argv) > 1 else None
     with sync_playwright() as p:
@@ -24,68 +37,73 @@ def main() -> None:
         # 1. Trace list
         page.goto(BASE + "/", wait_until="networkidle")
         page.wait_for_selector("table", timeout=5000)
-        page.screenshot(path=str(OUT / "01_list.png"), full_page=False)
+        page.screenshot(path=str(OUT / "01_list.png"))
         print("wrote 01_list.png")
 
         if not trace_id:
-            # Pick the 11-step "long" trace for the richest detail view.
             rows = page.query_selector_all("tr a[href^='/traces/']")
-            # Find the long trace link (task starts with 'On amazing.com')
             for a in rows:
-                href = a.get_attribute("href") or ""
                 text = a.inner_text()
                 if "amazing.com" in text:
-                    trace_id = href.split("/")[-1]
+                    trace_id = (a.get_attribute("href") or "").split("/")[-1]
                     break
             if not trace_id and rows:
-                href = rows[0].get_attribute("href") or ""
-                trace_id = href.split("/")[-1]
+                trace_id = (rows[0].get_attribute("href") or "").split("/")[-1]
 
         if not trace_id:
             print("no trace id — aborting")
             return
 
         page.goto(f"{BASE}/traces/{trace_id}", wait_until="networkidle")
-        page.wait_for_timeout(1500)  # let TanStack Router settle
+        page.wait_for_timeout(1500)
 
-        # Select step with the most visual change (step 5 = add-to-cart with toast)
-        step_buttons = page.query_selector_all("aside button, nav button, ul li button")
-        if not step_buttons:
-            # fallback: find all buttons inside the 320px-wide timeline rail
-            step_buttons = page.query_selector_all("div.w-\\[320px\\] button")
-        target_idx = min(5, max(0, len(step_buttons) - 1))
-        if step_buttons:
-            step_buttons[target_idx].click()
-            page.wait_for_timeout(300)
+        # Screenshots + Action + LLM: step 5 (add-to-cart — best visual compare)
+        _select_step(page, 5)
 
-        def click_tab(label: str) -> None:
-            btn = page.get_by_role("button", name=label, exact=False)
-            btn.first.click()
-            page.wait_for_timeout(500)
-
-        click_tab("Screenshots")
+        _click_tab(page, "Screenshots")
         page.screenshot(path=str(OUT / "02_detail_screenshots.png"))
         print("wrote 02_detail_screenshots.png")
 
-        click_tab("DOM Diff")
-        page.screenshot(path=str(OUT / "03_detail_dom.png"))
-        print("wrote 03_detail_dom.png")
-
-        click_tab("Action")
+        _click_tab(page, "Action")
         page.screenshot(path=str(OUT / "04_detail_action.png"))
         print("wrote 04_detail_action.png")
 
-        click_tab("LLM Calls")
+        _click_tab(page, "LLM Calls")
         page.screenshot(path=str(OUT / "05_detail_llm.png"))
         print("wrote 05_detail_llm.png")
 
-        # LLM detail modal
         row = page.query_selector("tbody tr")
         if row:
             row.click()
             page.wait_for_timeout(400)
             page.screenshot(path=str(OUT / "06_detail_llm_modal.png"))
             print("wrote 06_detail_llm_modal.png")
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(200)
+
+        # DOM Diff: step 0 (blank → full page) gives the cleanest side-by-side.
+        _select_step(page, 0)
+        _click_tab(page, "DOM Diff")
+        page.screenshot(path=str(OUT / "03_detail_dom.png"))
+        print("wrote 03_detail_dom.png")
+
+        # Error state on the gmail trace
+        page.goto(BASE + "/", wait_until="networkidle")
+        page.wait_for_timeout(600)
+        err_link = None
+        for a in page.query_selector_all("tr a[href^='/traces/']"):
+            if "Gmail" in a.inner_text():
+                err_link = (a.get_attribute("href") or "").split("/")[-1]
+                break
+        if err_link:
+            page.goto(f"{BASE}/traces/{err_link}", wait_until="networkidle")
+            page.wait_for_timeout(1200)
+            btns = page.query_selector_all("div.w-\\[320px\\] ul li button")
+            if btns:
+                btns[-1].click()
+                page.wait_for_timeout(400)
+            page.screenshot(path=str(OUT / "07_error_state.png"))
+            print("wrote 07_error_state.png")
 
         browser.close()
 
