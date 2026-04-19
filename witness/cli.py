@@ -14,7 +14,7 @@ from rich.console import Console
 from rich.table import Table
 from sqlmodel import select
 
-from witness import storage
+from witness import config, storage
 
 app = typer.Typer(
     help="Witness — local-first observability for browser agents.",
@@ -34,8 +34,13 @@ def view(
     import uvicorn
 
     storage.init_db()
+    config.write_default_if_missing()
     url = f"http://{host}:{port}"
     console.print(f"[bold]Witness[/bold] viewer at [cyan]{url}[/cyan]")
+    console.print(
+        f"[dim]Data: {storage.BASE_DIR}   ·   Telemetry: "
+        f"{'on' if config.load().telemetry else 'off'}[/dim]"
+    )
 
     if open_browser:
         def _open():
@@ -148,6 +153,17 @@ def _delete_all() -> None:
     if storage.TRACES_DIR.exists():
         shutil.rmtree(storage.TRACES_DIR, ignore_errors=True)
         storage.TRACES_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@app.command("config")
+def config_cmd() -> None:
+    """Show current config and its path."""
+    storage.init_db()
+    path = config.write_default_if_missing()
+    cfg = config.load()
+    console.print(f"[bold]config[/bold] {path}")
+    console.print(f"  telemetry = [cyan]{cfg.telemetry}[/cyan]")
+    console.print("[dim]Edit the file to change settings.[/dim]")
 
 
 if __name__ == "__main__":

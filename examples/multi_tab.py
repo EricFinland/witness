@@ -1,12 +1,10 @@
-"""Minimal Witness + Browser Use example — success case.
+"""Multi-tab recipe — the agent opens several tabs to compare data.
 
-The headline "30-second pitch" example. A short task that completes in
-a few steps so you can scrub through the full trace in the viewer.
+Uses Browser Use's built-in multi-tab support. Witness captures the active
+page at each step, so you see the context switch reflected in the URL
+column and screenshot diff.
 
-    pip install witness[browser-use]
-    playwright install chromium
-    # add ANTHROPIC_API_KEY to .env
-    python examples/hn_top_story.py
+    python examples/multi_tab.py
     witness view
 """
 
@@ -33,15 +31,16 @@ async def main() -> None:
 
     agent = Agent(
         task=(
-            "Go to https://news.ycombinator.com. Find the top story. "
-            "Return its title and its point count."
+            "Open three tabs: https://news.ycombinator.com, "
+            "https://lobste.rs, and https://old.reddit.com/r/programming. "
+            "From each, extract the single top story's title and points. "
+            "Return a comparison table."
         ),
         llm=ChatAnthropic(model="claude-sonnet-4-5"),
     )
     witness.instrument(agent)
     await agent.run()
-    print(f"\nTrace saved. Run `witness view` to open the viewer.")
-    print(f"Trace id: {agent._witness_trace_id}")
+    print(f"\nTrace: {agent._witness_trace_id}")
 
 
 if __name__ == "__main__":

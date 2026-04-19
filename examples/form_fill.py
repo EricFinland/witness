@@ -1,12 +1,9 @@
-"""Minimal Witness + Browser Use example — success case.
+"""Form-fill recipe — exercises input_text + click actions.
 
-The headline "30-second pitch" example. A short task that completes in
-a few steps so you can scrub through the full trace in the viewer.
+Good trace for showing off the DOM diff (each field fill mutates the
+form's state) and the per-step screenshot compare.
 
-    pip install witness[browser-use]
-    playwright install chromium
-    # add ANTHROPIC_API_KEY to .env
-    python examples/hn_top_story.py
+    python examples/form_fill.py
     witness view
 """
 
@@ -33,15 +30,17 @@ async def main() -> None:
 
     agent = Agent(
         task=(
-            "Go to https://news.ycombinator.com. Find the top story. "
-            "Return its title and its point count."
+            "Open https://httpbin.org/forms/post. Fill in: "
+            "customer name 'Ada Lovelace', telephone '+1-415-555-0123', "
+            "email 'ada@example.com', pick 'Medium' size, and 'Mushroom' + "
+            "'Cheese' toppings. Submit the form and report what the response "
+            "page shows."
         ),
         llm=ChatAnthropic(model="claude-sonnet-4-5"),
     )
     witness.instrument(agent)
     await agent.run()
-    print(f"\nTrace saved. Run `witness view` to open the viewer.")
-    print(f"Trace id: {agent._witness_trace_id}")
+    print(f"\nTrace: {agent._witness_trace_id}")
 
 
 if __name__ == "__main__":
