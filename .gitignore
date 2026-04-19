@@ -1,0 +1,31 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Witness data dirs (local-only)
+.witness/
+.witness-dev/
+traces/
+
+# Viewer build outputs
+viewer/node_modules/
+viewer/dist/
+witness/_viewer_dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
