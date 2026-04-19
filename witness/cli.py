@@ -14,7 +14,7 @@ from rich.console import Console
 from rich.table import Table
 from sqlmodel import select
 
-from witness import config, storage
+from witness import config, share as share_mod, storage
 
 app = typer.Typer(
     help="Witness — local-first observability for browser agents.",
@@ -153,6 +153,20 @@ def _delete_all() -> None:
     if storage.TRACES_DIR.exists():
         shutil.rmtree(storage.TRACES_DIR, ignore_errors=True)
         storage.TRACES_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@app.command()
+def share(
+    trace_id: str = typer.Argument(..., help="Local trace id (see `witness ls`)."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the first-time confirmation."),
+    endpoint: Optional[str] = typer.Option(
+        None, "--endpoint", help="Override upload endpoint. Also WITNESS_UPLOAD_ENDPOINT env var."
+    ),
+) -> None:
+    """Upload a trace to a hosted viewer and print a public URL."""
+    code = share_mod.run(trace_id, yes=yes, endpoint=endpoint)
+    if code != 0:
+        raise typer.Exit(code)
 
 
 @app.command("config")
