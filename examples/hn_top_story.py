@@ -3,7 +3,7 @@
 The headline "30-second pitch" example. A short task that completes in
 a few steps so you can scrub through the full trace in the viewer.
 
-    pip install witness[browser-use]
+    pip install usewitness[browser-use]
     playwright install chromium
     # add ANTHROPIC_API_KEY to .env
     python examples/hn_top_story.py

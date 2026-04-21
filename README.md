@@ -2,6 +2,11 @@
 
 # Witness
 
+[![PyPI version](https://img.shields.io/pypi/v/usewitness.svg)](https://pypi.org/project/usewitness/)
+[![Python versions](https://img.shields.io/pypi/pyversions/usewitness.svg)](https://pypi.org/project/usewitness/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/EricFinland/witness/blob/main/LICENSE)
+[![Twitter Follow](https://img.shields.io/twitter/follow/usewitness?style=social)](https://twitter.com/usewitness)
+
 **See what your browser agent actually did.**
 
 Local-first observability for browser agents. DOM diffs, screenshot scrubbing, LLM cost per step, action replay — all in a viewer that lives on your machine.
@@ -15,7 +20,7 @@ Local-first observability for browser agents. DOM diffs, screenshot scrubbing, L
 ## Install
 
 ```bash
-pip install witness
+pip install usewitness
 playwright install chromium
 ```
 

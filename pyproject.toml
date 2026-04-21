@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "witness"
-version = "0.0.1"
+name = "usewitness"
+version = "0.1.0"
 description = "Local-first observability for browser agents. Datadog for browser agents."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -44,12 +44,15 @@ dev = [
 witness = "witness.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/ericcatalano/witness"
+Homepage = "https://github.com/EricFinland/witness"
 
 [tool.hatch.build.targets.wheel]
 packages = ["witness"]
 
 [tool.hatch.build.targets.wheel.force-include]
+"witness/_viewer_dist" = "witness/_viewer_dist"
+
+[tool.hatch.build.targets.sdist.force-include]
 "witness/_viewer_dist" = "witness/_viewer_dist"
 
 [tool.ruff]

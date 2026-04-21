@@ -13,7 +13,7 @@ and runs end-to-end.
 ## Running any of them
 
 ```bash
-pip install witness[browser-use]
+pip install usewitness[browser-use]
 playwright install chromium
 # add ANTHROPIC_API_KEY to .env
 python examples/hn_top_story.py
