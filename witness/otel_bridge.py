@@ -109,9 +109,15 @@ def _maybe_extract_llm(span: ReadableSpan) -> LLMSpanSnapshot | None:
         or 0
     )
 
-    # OpenLLMetry records prompts/responses as indexed prefix attributes.
-    prompt = _join_indexed(attrs, ["gen_ai.prompt", "llm.prompts"])
-    response = _join_indexed(attrs, ["gen_ai.completion", "llm.completions"])
+    # OpenLLMetry 0.60+ emits OTel GenAI conventions: system_instructions +
+    # input.messages + output.messages as JSON-serialized strings. Older
+    # versions used indexed gen_ai.prompt.{i}.content / gen_ai.completion.{i}.*.
+    prompt = _structured_prompt(attrs) or _join_indexed(
+        attrs, ["gen_ai.prompt", "llm.prompts"]
+    )
+    response = _structured_response(attrs) or _join_indexed(
+        attrs, ["gen_ai.completion", "llm.completions"]
+    )
 
     if span.start_time is not None and span.end_time is not None:
         latency_ms = max(0, (span.end_time - span.start_time) // 1_000_000)
@@ -127,6 +133,77 @@ def _maybe_extract_llm(span: ReadableSpan) -> LLMSpanSnapshot | None:
         response=response,
         end_ts_ns=span.end_time or 0,
     )
+
+
+def _structured_prompt(attrs: dict) -> str:
+    parts: list[str] = []
+    sys_instr = attrs.get("gen_ai.system_instructions")
+    if sys_instr:
+        parts.append(_render_messages(sys_instr, default_role="system"))
+    input_msgs = attrs.get("gen_ai.input.messages")
+    if input_msgs:
+        parts.append(_render_messages(input_msgs))
+    return "\n\n".join(p for p in parts if p)
+
+
+def _structured_response(attrs: dict) -> str:
+    output_msgs = attrs.get("gen_ai.output.messages")
+    return _render_messages(output_msgs) if output_msgs else ""
+
+
+def _render_messages(value, default_role: str | None = None) -> str:
+    """Render OpenLLMetry's JSON-serialized messages array as readable text."""
+    import json as _json
+
+    if isinstance(value, str):
+        try:
+            data = _json.loads(value)
+        except _json.JSONDecodeError:
+            return value
+    else:
+        data = value
+    if not isinstance(data, list):
+        return str(data)
+
+    out: list[str] = []
+    for msg in data:
+        if not isinstance(msg, dict):
+            continue
+        role = msg.get("role") or default_role
+        if role:
+            out.append(f"[{role}]")
+        for part in msg.get("parts") or []:
+            if not isinstance(part, dict):
+                continue
+            ptype = part.get("type", "")
+            if ptype == "text":
+                out.append(str(part.get("content") or part.get("text") or ""))
+            elif ptype == "tool_call":
+                name = part.get("name", "")
+                args = part.get("arguments")
+                out.append(f"<tool_call: {name}>")
+                if args is not None:
+                    out.append(_json.dumps(args, indent=2, default=str))
+            elif ptype == "tool_call_response":
+                out.append(f"<tool_result: {part.get('id','')}>")
+                out.append(str(part.get("response") or part.get("content") or ""))
+            else:
+                out.append(_json.dumps(part, default=str))
+        if not msg.get("parts"):
+            content = msg.get("content")
+            if isinstance(content, str):
+                out.append(content)
+            elif isinstance(content, list):
+                for c in content:
+                    if isinstance(c, dict):
+                        out.append(
+                            str(c.get("text") or c.get("content") or _json.dumps(c, default=str))
+                        )
+                    else:
+                        out.append(str(c))
+            elif content is not None:
+                out.append(str(content))
+    return "\n".join(s for s in out if s)
 
 
 def _join_indexed(attrs: dict, prefixes: list[str]) -> str:

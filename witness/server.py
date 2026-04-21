@@ -75,7 +75,7 @@ def _viewer_dist_dir() -> Path:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Witness", version="0.1.0")
+    app = FastAPI(title="Witness", version="0.1.1")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],

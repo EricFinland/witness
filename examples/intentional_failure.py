@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 
 import witness
 
-load_dotenv()
+load_dotenv(override=True)
 
 
 async def main() -> None:

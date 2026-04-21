@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "usewitness"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local-first observability for browser agents. Datadog for browser agents."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -33,7 +33,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-browser-use = ["browser-use==0.11.13"]
+browser-use = ["browser-use>=0.11.13,<0.12"]
 dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",

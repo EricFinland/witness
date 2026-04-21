@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import os
 import time
 import uuid
 from datetime import datetime, timezone
@@ -16,6 +17,23 @@ from witness.pricing import calculate_cost
 
 log = logging.getLogger("witness")
 
+_API_KEY_VARS = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY")
+
+
+def _warn_if_api_key_empty_shadowed() -> None:
+    """Catch a common DX footgun: an empty-string export shadows .env values
+    because python-dotenv's load_dotenv() defaults to override=False."""
+    for var in _API_KEY_VARS:
+        if os.environ.get(var, None) == "":
+            log.warning(
+                "witness: %s is set to an empty string in your environment. "
+                "python-dotenv defaults to override=False, so any value in a "
+                ".env file will be ignored. Run `unset %s` or use "
+                "`load_dotenv(override=True)`.",
+                var, var,
+            )
+            return
+
 
 def instrument(agent: Any) -> Any:
     """Attach Witness tracing to a browser_use.Agent.
@@ -26,6 +44,7 @@ def instrument(agent: Any) -> Any:
     if getattr(agent, "_witness_trace_id", None):
         return agent  # already instrumented
 
+    _warn_if_api_key_empty_shadowed()
     storage.init_db()
     otel_bridge.init_tracing(app_name="witness")
 
@@ -241,7 +260,9 @@ async def _safe_get_html(page) -> str | None:
     if page is None:
         return None
     try:
-        result = await page.evaluate("document.documentElement.outerHTML")
+        # browser-use ≥0.11 rejects bare JS; it requires a `(...args) => ...`
+        # arrow function. Playwright accepts both forms, so this works for either.
+        result = await page.evaluate("() => document.documentElement.outerHTML")
     except Exception as e:  # noqa: BLE001
         log.debug("witness: evaluate(outerHTML) failed: %r", e)
         return None
