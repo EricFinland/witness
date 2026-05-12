@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -60,8 +60,18 @@ class DayStatOut(BaseModel):
     total_tokens: int
 
 
+class TotalsOut(BaseModel):
+    trace_count: int
+    success_count: int
+    error_count: int
+    total_cost_usd: float
+    total_tokens: int
+    avg_cost_usd: float
+    avg_tokens: float
+
+
 class StatsOut(BaseModel):
-    totals: dict
+    totals: TotalsOut
     by_model: list[ModelStatOut]
     by_day: list[DayStatOut]
 
@@ -173,19 +183,19 @@ def create_app() -> FastAPI:
             )
 
     @app.get("/api/stats")
-    def get_stats(days: int = 30) -> StatsOut:
+    def get_stats(days: int = Query(default=30, ge=1, le=365)) -> StatsOut:
         from witness.stats import compute_stats
         result = compute_stats(days=days)
         return StatsOut(
-            totals={
-                "trace_count": result.trace_count,
-                "success_count": result.success_count,
-                "error_count": result.error_count,
-                "total_cost_usd": result.total_cost_usd,
-                "total_tokens": result.total_tokens,
-                "avg_cost_usd": result.avg_cost_usd,
-                "avg_tokens": result.avg_tokens,
-            },
+            totals=TotalsOut(
+                trace_count=result.trace_count,
+                success_count=result.success_count,
+                error_count=result.error_count,
+                total_cost_usd=result.total_cost_usd,
+                total_tokens=result.total_tokens,
+                avg_cost_usd=result.avg_cost_usd,
+                avg_tokens=result.avg_tokens,
+            ),
             by_model=[
                 ModelStatOut(
                     model=m.model,
