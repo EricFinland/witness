@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timezone
 
 import pytest
+from typer.testing import CliRunner
 
 import witness.storage as storage
 from witness.cli import app
@@ -171,17 +172,16 @@ def test_diff_cli_text_output(db):
         _make_trace(s, "aaaaaaaaaaaa", ["go_to_url"])
         _make_trace(s, "bbbbbbbbbbbb", ["go_to_url", "scroll_down"])
 
-    from typer.testing import CliRunner
     runner = CliRunner()
     result = runner.invoke(app, ["diff", "aaaaaaaaaaaa", "bbbbbbbbbbbb"])
 
     assert result.exit_code == 0
     assert "go_to_url" in result.output
     assert "scroll_down" in result.output
+    assert "+" in result.output  # scroll_down is only in B, should show as inserted
 
 
 def test_diff_cli_trace_not_found(db):
-    from typer.testing import CliRunner
     runner = CliRunner()
     result = runner.invoke(app, ["diff", "doesnotexist1", "doesnotexist2"])
 
@@ -193,7 +193,6 @@ def test_diff_cli_json_output(db):
         _make_trace(s, "aaaaaaaaaaaa", ["go_to_url"])
         _make_trace(s, "bbbbbbbbbbbb", ["go_to_url"])
 
-    from typer.testing import CliRunner
     runner = CliRunner()
     result = runner.invoke(app, ["diff", "aaaaaaaaaaaa", "bbbbbbbbbbbb", "--json"])
 
@@ -203,3 +202,6 @@ def test_diff_cli_json_output(db):
     assert data["trace_b"]["id"] == "bbbbbbbbbbbb"
     assert data["pairs"][0]["kind"] == "equal"
     assert "summary" in data
+    assert "cost_a" in data["pairs"][0]
+    assert "cost_b" in data["pairs"][0]
+    assert "payload_changed" in data["pairs"][0]
