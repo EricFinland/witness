@@ -222,8 +222,9 @@ def _render_diff_text(result) -> None:
         if val == 0:
             return "[dim]—[/dim]"
         color = "green" if val < 0 else "red"
-        prefix = "+" if val > 0 else ""
-        s = fmt_fn(val) if fmt_fn else str(val)
+        prefix = "+" if val > 0 else "-"
+        abs_val = abs(val)
+        s = fmt_fn(abs_val) if fmt_fn else str(abs_val)
         return f"[{color}]{prefix}{s}[/{color}]"
 
     table.add_row(
@@ -236,7 +237,7 @@ def _render_diff_text(result) -> None:
         "Cost",
         f"${ta.total_cost_usd:.4f}",
         f"${tb.total_cost_usd:.4f}",
-        _delta(result.cost_delta, fmt_fn=lambda x: f"${abs(x):.4f}"),
+        _delta(result.cost_delta, fmt_fn=lambda x: f"${x:.4f}"),
     )
     table.add_row(
         "Tokens",
@@ -333,7 +334,7 @@ def _render_diff_json(result) -> None:
         },
         "pairs": [_pair_dict(p) for p in result.pairs],
     }
-    console.print(_json.dumps(output, indent=2))
+    console.print(_json.dumps(output, indent=2), markup=False)
 
 
 @app.command("config")
