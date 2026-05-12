@@ -149,6 +149,8 @@ def test_stats_unknown_model_grouped_as_unknown(db):
 
     assert len(result.by_model) == 1
     assert result.by_model[0].model == "unknown"
+    assert result.by_model[0].trace_count == 1
+    assert result.by_model[0].total_cost_usd == pytest.approx(0.01)
 
 
 # ── API endpoint ──────────────────────────────────────────────────────────────
@@ -197,7 +199,7 @@ def test_stats_cli_basic_output(db):
 
     assert result.exit_code == 0
     assert "claude-sonnet-4-5" in result.output
-    assert "0.01" in result.output
+    assert "0.0100" in result.output
 
 
 def test_stats_cli_empty_db(db):
