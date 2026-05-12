@@ -16,6 +16,7 @@ class ModelStat:
     trace_count: int
     total_cost_usd: float
     total_tokens: int
+    avg_cost_usd: float
 
 
 @dataclass
@@ -72,7 +73,16 @@ def compute_stats(days: int = 30) -> StatsResult:
         model_acc[key]["total_cost_usd"] += t.total_cost_usd or 0.0
         model_acc[key]["total_tokens"] += t.total_tokens or 0
     by_model = sorted(
-        [ModelStat(model=k, **v) for k, v in model_acc.items()],
+        [
+            ModelStat(
+                model=k,
+                trace_count=v["trace_count"],
+                total_cost_usd=v["total_cost_usd"],
+                total_tokens=v["total_tokens"],
+                avg_cost_usd=v["total_cost_usd"] / v["trace_count"] if v["trace_count"] else 0.0,
+            )
+            for k, v in model_acc.items()
+        ],
         key=lambda x: x.total_cost_usd,
         reverse=True,
     )

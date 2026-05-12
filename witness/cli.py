@@ -401,13 +401,12 @@ def _stats_render_text(result, *, days: int) -> None:
         for m in result.by_model:
             bar_width = max(1, int((m.total_cost_usd / max(max_cost, 0.000001)) * 12))
             bar = f"[green]{'█' * bar_width}[/green][dim]{'░' * (12 - bar_width)}[/dim]"
-            avg = m.total_cost_usd / m.trace_count if m.trace_count else 0
             model_table.add_row(
                 m.model,
                 str(m.trace_count),
                 f"${m.total_cost_usd:.4f}  {bar}",
                 f"{m.total_tokens:,}",
-                f"${avg:.4f}",
+                f"${m.avg_cost_usd:.4f}",
             )
 
         console.print(model_table)
@@ -457,7 +456,7 @@ def _stats_render_json(result) -> None:
                 "trace_count": m.trace_count,
                 "total_cost_usd": m.total_cost_usd,
                 "total_tokens": m.total_tokens,
-                "avg_cost_usd": round(m.total_cost_usd / m.trace_count, 6) if m.trace_count else 0,
+                "avg_cost_usd": m.avg_cost_usd,
             }
             for m in result.by_model
         ],

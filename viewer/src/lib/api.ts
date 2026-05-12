@@ -18,7 +18,5 @@ export const api = {
     if (!r.ok) throw new Error(`${r.status}`);
     return r.text();
   },
-  getStats(days = 30): Promise<Stats> {
-    return fetch(`/api/stats?days=${days}`).then((r) => r.json());
-  },
+  getStats: (days = 30) => j<Stats>(`/api/stats?days=${days}`),
 };

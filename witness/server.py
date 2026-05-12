@@ -51,6 +51,7 @@ class ModelStatOut(BaseModel):
     trace_count: int
     total_cost_usd: float
     total_tokens: int
+    avg_cost_usd: float
 
 
 class DayStatOut(BaseModel):
@@ -202,6 +203,7 @@ def create_app() -> FastAPI:
                     trace_count=m.trace_count,
                     total_cost_usd=m.total_cost_usd,
                     total_tokens=m.total_tokens,
+                    avg_cost_usd=m.avg_cost_usd,
                 )
                 for m in result.by_model
             ],
