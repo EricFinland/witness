@@ -1,4 +1,4 @@
-import type { TraceSummary, TraceDetail } from "./types";
+import type { TraceSummary, TraceDetail, Stats } from "./types";
 
 const BASE = "";
 
@@ -17,5 +17,8 @@ export const api = {
     const r = await fetch(BASE + `/api/traces/${traceId}/blobs/${path}`);
     if (!r.ok) throw new Error(`${r.status}`);
     return r.text();
+  },
+  getStats(days = 30): Promise<Stats> {
+    return fetch(`/api/stats?days=${days}`).then((r) => r.json());
   },
 };

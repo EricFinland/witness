@@ -43,3 +43,32 @@ export interface TraceDetail extends TraceSummary {
   error: string | null;
   steps: Step[];
 }
+
+export interface ModelStat {
+  model: string;
+  trace_count: number;
+  total_cost_usd: number;
+  total_tokens: number;
+  avg_cost_usd: number;
+}
+
+export interface DayStat {
+  date: string;
+  trace_count: number;
+  total_cost_usd: number;
+  total_tokens: number;
+}
+
+export interface Stats {
+  totals: {
+    trace_count: number;
+    success_count: number;
+    error_count: number;
+    total_cost_usd: number;
+    total_tokens: number;
+    avg_cost_usd: number;
+    avg_tokens: number;
+  };
+  by_model: ModelStat[];
+  by_day: DayStat[];
+}

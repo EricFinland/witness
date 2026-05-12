@@ -15,6 +15,12 @@ function RootLayout() {
           <span>Witness</span>
         </Link>
         <span className="text-fg-subtle text-[11px] mono">v0.0.1</span>
+        <Link
+          to="/stats"
+          className="text-[13px] text-fg-muted hover:text-fg transition-colors [&.active]:text-fg"
+        >
+          Stats
+        </Link>
         <div className="flex-1" />
         <a
           href="https://github.com/ericcatalano/witness"
