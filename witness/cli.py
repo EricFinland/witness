@@ -337,6 +337,141 @@ def _render_diff_json(result) -> None:
     console.print(_json.dumps(output, indent=2), markup=False)
 
 
+@app.command()
+def stats(
+    days: int = typer.Option(30, help="Number of days to include in the daily breakdown."),
+    json_out: bool = typer.Option(False, "--json", help="Output as JSON for scripting."),
+) -> None:
+    """Show aggregate cost and token usage across all traces."""
+    from witness.stats import compute_stats
+
+    storage.init_db()
+    result = compute_stats(days=days)
+
+    if json_out:
+        _stats_render_json(result)
+        return
+
+    _stats_render_text(result, days=days)
+
+
+def _stats_render_text(result, *, days: int) -> None:
+    from rich.rule import Rule
+
+    if result.trace_count == 0:
+        console.print("[dim]No traces yet. Run an instrumented agent first.[/dim]")
+        return
+
+    # ── totals ────────────────────────────────────────────────────────────────
+    console.print()
+    console.print("[bold]Total[/bold]")
+    console.print(Rule(style="dim"))
+
+    totals_table = Table(show_header=False, box=None, padding=(0, 2))
+    totals_table.add_column("Metric", style="dim")
+    totals_table.add_column("Value")
+
+    status_detail = f"[green]{result.success_count} success[/green]"
+    if result.error_count:
+        status_detail += f"  [red]{result.error_count} error[/red]"
+
+    totals_table.add_row("Traces", f"{result.trace_count}  ({status_detail})")
+    totals_table.add_row("Total cost", f"[bold]${result.total_cost_usd:.4f}[/bold]")
+    totals_table.add_row("Total tokens", f"{result.total_tokens:,}")
+    totals_table.add_row("Avg cost / run", f"${result.avg_cost_usd:.4f}")
+    totals_table.add_row("Avg tokens / run", f"{result.avg_tokens:,.0f}")
+
+    console.print(totals_table)
+    console.print()
+
+    # ── by model ──────────────────────────────────────────────────────────────
+    console.print("[bold]By Model[/bold]")
+    console.print(Rule(style="dim"))
+
+    model_table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
+    model_table.add_column("Model")
+    model_table.add_column("Runs", justify="right")
+    model_table.add_column("Cost", justify="right")
+    model_table.add_column("Tokens", justify="right")
+    model_table.add_column("Avg cost", justify="right")
+
+    max_cost = result.by_model[0].total_cost_usd if result.by_model else 1.0
+
+    for m in result.by_model:
+        bar_width = max(1, int((m.total_cost_usd / max(max_cost, 0.000001)) * 12))
+        bar = f"[green]{'█' * bar_width}[/green][dim]{'░' * (12 - bar_width)}[/dim]"
+        avg = m.total_cost_usd / m.trace_count if m.trace_count else 0
+        model_table.add_row(
+            m.model,
+            str(m.trace_count),
+            f"${m.total_cost_usd:.4f}  {bar}",
+            f"{m.total_tokens:,}",
+            f"${avg:.4f}",
+        )
+
+    console.print(model_table)
+    console.print()
+
+    # ── by day ────────────────────────────────────────────────────────────────
+    if result.by_day:
+        console.print(f"[bold]By Day[/bold]  [dim](last {days} days)[/dim]")
+        console.print(Rule(style="dim"))
+
+        day_table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
+        day_table.add_column("Date")
+        day_table.add_column("Runs", justify="right")
+        day_table.add_column("Cost", justify="right")
+        day_table.add_column("Tokens", justify="right")
+
+        max_day_cost = max((d.total_cost_usd for d in result.by_day), default=1.0)
+
+        for d in result.by_day:
+            bar_width = max(1, int((d.total_cost_usd / max(max_day_cost, 0.000001)) * 12))
+            bar = f"[cyan]{'█' * bar_width}[/cyan][dim]{'░' * (12 - bar_width)}[/dim]"
+            day_table.add_row(
+                d.date,
+                str(d.trace_count),
+                f"${d.total_cost_usd:.4f}  {bar}",
+                f"{d.total_tokens:,}",
+            )
+
+        console.print(day_table)
+        console.print()
+
+
+def _stats_render_json(result) -> None:
+    output = {
+        "totals": {
+            "trace_count": result.trace_count,
+            "success_count": result.success_count,
+            "error_count": result.error_count,
+            "total_cost_usd": result.total_cost_usd,
+            "total_tokens": result.total_tokens,
+            "avg_cost_usd": result.avg_cost_usd,
+            "avg_tokens": result.avg_tokens,
+        },
+        "by_model": [
+            {
+                "model": m.model,
+                "trace_count": m.trace_count,
+                "total_cost_usd": m.total_cost_usd,
+                "total_tokens": m.total_tokens,
+            }
+            for m in result.by_model
+        ],
+        "by_day": [
+            {
+                "date": d.date,
+                "trace_count": d.trace_count,
+                "total_cost_usd": d.total_cost_usd,
+                "total_tokens": d.total_tokens,
+            }
+            for d in result.by_day
+        ],
+    }
+    console.print(_json.dumps(output, indent=2), markup=False)
+
+
 @app.command("config")
 def config_cmd() -> None:
     """Show current config and its path."""
