@@ -57,8 +57,8 @@ def compute_stats(days: int = 30) -> StatsResult:
     trace_count = len(traces)
     success_count = sum(1 for t in traces if t.status == "success")
     error_count = sum(1 for t in traces if t.status == "error")
-    total_cost = sum(t.total_cost_usd for t in traces)
-    total_tokens = sum(t.total_tokens for t in traces)
+    total_cost = sum(t.total_cost_usd or 0.0 for t in traces)
+    total_tokens = sum(t.total_tokens or 0 for t in traces)
     avg_cost = total_cost / trace_count
     avg_tokens = total_tokens / trace_count
 
@@ -69,8 +69,8 @@ def compute_stats(days: int = 30) -> StatsResult:
         if key not in model_acc:
             model_acc[key] = {"trace_count": 0, "total_cost_usd": 0.0, "total_tokens": 0}
         model_acc[key]["trace_count"] += 1
-        model_acc[key]["total_cost_usd"] += t.total_cost_usd
-        model_acc[key]["total_tokens"] += t.total_tokens
+        model_acc[key]["total_cost_usd"] += t.total_cost_usd or 0.0
+        model_acc[key]["total_tokens"] += t.total_tokens or 0
     by_model = sorted(
         [ModelStat(model=k, **v) for k, v in model_acc.items()],
         key=lambda x: x.total_cost_usd,
@@ -90,8 +90,8 @@ def compute_stats(days: int = 30) -> StatsResult:
         if date_str not in day_acc:
             day_acc[date_str] = {"trace_count": 0, "total_cost_usd": 0.0, "total_tokens": 0}
         day_acc[date_str]["trace_count"] += 1
-        day_acc[date_str]["total_cost_usd"] += t.total_cost_usd
-        day_acc[date_str]["total_tokens"] += t.total_tokens
+        day_acc[date_str]["total_cost_usd"] += t.total_cost_usd or 0.0
+        day_acc[date_str]["total_tokens"] += t.total_tokens or 0
     by_day = sorted(
         [DayStat(date=k, **v) for k, v in day_acc.items()],
         key=lambda x: x.date,
