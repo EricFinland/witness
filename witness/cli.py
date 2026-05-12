@@ -385,32 +385,33 @@ def _stats_render_text(result, *, days: int) -> None:
     console.print()
 
     # ── by model ──────────────────────────────────────────────────────────────
-    console.print("[bold]By Model[/bold]")
-    console.print(Rule(style="dim"))
+    if result.by_model:
+        console.print("[bold]By Model[/bold]")
+        console.print(Rule(style="dim"))
 
-    model_table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
-    model_table.add_column("Model")
-    model_table.add_column("Runs", justify="right")
-    model_table.add_column("Cost", justify="right")
-    model_table.add_column("Tokens", justify="right")
-    model_table.add_column("Avg cost", justify="right")
+        model_table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
+        model_table.add_column("Model")
+        model_table.add_column("Runs", justify="right")
+        model_table.add_column("Cost", justify="right")
+        model_table.add_column("Tokens", justify="right")
+        model_table.add_column("Avg cost", justify="right")
 
-    max_cost = result.by_model[0].total_cost_usd if result.by_model else 1.0
+        max_cost = max((m.total_cost_usd for m in result.by_model), default=1.0)
 
-    for m in result.by_model:
-        bar_width = max(1, int((m.total_cost_usd / max(max_cost, 0.000001)) * 12))
-        bar = f"[green]{'█' * bar_width}[/green][dim]{'░' * (12 - bar_width)}[/dim]"
-        avg = m.total_cost_usd / m.trace_count if m.trace_count else 0
-        model_table.add_row(
-            m.model,
-            str(m.trace_count),
-            f"${m.total_cost_usd:.4f}  {bar}",
-            f"{m.total_tokens:,}",
-            f"${avg:.4f}",
-        )
+        for m in result.by_model:
+            bar_width = max(1, int((m.total_cost_usd / max(max_cost, 0.000001)) * 12))
+            bar = f"[green]{'█' * bar_width}[/green][dim]{'░' * (12 - bar_width)}[/dim]"
+            avg = m.total_cost_usd / m.trace_count if m.trace_count else 0
+            model_table.add_row(
+                m.model,
+                str(m.trace_count),
+                f"${m.total_cost_usd:.4f}  {bar}",
+                f"{m.total_tokens:,}",
+                f"${avg:.4f}",
+            )
 
-    console.print(model_table)
-    console.print()
+        console.print(model_table)
+        console.print()
 
     # ── by day ────────────────────────────────────────────────────────────────
     if result.by_day:
@@ -456,6 +457,7 @@ def _stats_render_json(result) -> None:
                 "trace_count": m.trace_count,
                 "total_cost_usd": m.total_cost_usd,
                 "total_tokens": m.total_tokens,
+                "avg_cost_usd": round(m.total_cost_usd / m.trace_count, 6) if m.trace_count else 0,
             }
             for m in result.by_model
         ],
