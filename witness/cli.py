@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json as _json
 import shutil
 import sys
 import threading
@@ -167,6 +168,172 @@ def share(
     code = share_mod.run(trace_id, yes=yes, endpoint=endpoint)
     if code != 0:
         raise typer.Exit(code)
+
+
+@app.command()
+def diff(
+    trace_a: str = typer.Argument(..., help="Baseline trace id (see `witness ls`)."),
+    trace_b: str = typer.Argument(..., help="Comparison trace id."),
+    json_out: bool = typer.Option(False, "--json", help="Output diff as JSON for scripting."),
+) -> None:
+    """Compare two traces step-by-step and surface regressions."""
+    from witness.diff import diff_traces
+
+    storage.init_db()
+    try:
+        result = diff_traces(trace_a, trace_b)
+    except LookupError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1)
+
+    if json_out:
+        _render_diff_json(result)
+    else:
+        _render_diff_text(result)
+
+
+def _render_diff_text(result) -> None:
+    from rich.rule import Rule
+
+    ta, tb = result.trace_a, result.trace_b
+
+    # ── header ────────────────────────────────────────────────────────────────
+    console.print()
+    for label, t in [("A", ta), ("B", tb)]:
+        status_color = {"success": "green", "error": "red", "running": "yellow"}.get(
+            t.status, "white"
+        )
+        console.print(
+            f"  [bold]{label}[/bold]  [cyan]{t.id}[/cyan]"
+            f"  {t.started_at.strftime('%Y-%m-%d %H:%M')}"
+            f"  [{status_color}]{t.status}[/{status_color}]"
+            f"  [dim]{(t.task or '')[:72]}[/dim]"
+        )
+    console.print()
+
+    # ── summary table ─────────────────────────────────────────────────────────
+    table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
+    table.add_column("Metric", style="dim")
+    table.add_column("A", justify="right")
+    table.add_column("B", justify="right")
+    table.add_column("Δ", justify="right")
+
+    def _delta(val: float | int, fmt_fn=None) -> str:
+        if val == 0:
+            return "[dim]—[/dim]"
+        color = "green" if val < 0 else "red"
+        prefix = "+" if val > 0 else ""
+        s = fmt_fn(val) if fmt_fn else str(val)
+        return f"[{color}]{prefix}{s}[/{color}]"
+
+    table.add_row(
+        "Steps",
+        str(ta.step_count),
+        str(tb.step_count),
+        _delta(result.step_count_delta),
+    )
+    table.add_row(
+        "Cost",
+        f"${ta.total_cost_usd:.4f}",
+        f"${tb.total_cost_usd:.4f}",
+        _delta(result.cost_delta, fmt_fn=lambda x: f"${abs(x):.4f}"),
+    )
+    table.add_row(
+        "Tokens",
+        str(ta.total_tokens),
+        str(tb.total_tokens),
+        _delta(result.token_delta),
+    )
+    table.add_row(
+        "Latency",
+        f"{ta.total_latency_ms // 1000}s",
+        f"{tb.total_latency_ms // 1000}s",
+        _delta(result.latency_delta_ms // 1000 if result.latency_delta_ms else 0),
+    )
+    if ta.status != tb.status:
+        sc_a = {"success": "green", "error": "red", "running": "yellow"}.get(ta.status, "white")
+        sc_b = {"success": "green", "error": "red", "running": "yellow"}.get(tb.status, "white")
+        table.add_row(
+            "Status",
+            f"[{sc_a}]{ta.status}[/{sc_a}]",
+            f"[{sc_b}]{tb.status}[/{sc_b}]",
+            "[yellow]changed[/yellow]",
+        )
+
+    console.print(table)
+    console.print()
+
+    # ── step sequence ─────────────────────────────────────────────────────────
+    console.print("[bold]Step Sequence[/bold]")
+    console.print(Rule(style="dim"))
+
+    b_idx = 0
+    for pair in result.pairs:
+        if pair.kind == "equal":
+            action = pair.step_a.action_type
+            note = "  [dim][payload changed][/dim]" if pair.payload_changed else ""
+            console.print(f"  [dim]{b_idx:>3}[/dim]  [dim]=[/dim]  {action}{note}")
+            b_idx += 1
+        elif pair.kind == "replace":
+            console.print(
+                f"  [dim]{b_idx:>3}[/dim]  [yellow]~[/yellow]"
+                f"  [dim]{pair.step_a.action_type}[/dim] [dim]→[/dim] [yellow]{pair.step_b.action_type}[/yellow]"
+            )
+            b_idx += 1
+        elif pair.kind == "delete":
+            console.print(
+                f"  [dim]   [/dim]  [red]-[/red]  [red]{pair.step_a.action_type}[/red]"
+                f"  [dim](only in A)[/dim]"
+            )
+        else:  # insert
+            console.print(
+                f"  [dim]{b_idx:>3}[/dim]  [green]+[/green]  [green]{pair.step_b.action_type}[/green]"
+                f"  [dim](only in B)[/dim]"
+            )
+            b_idx += 1
+
+    console.print()
+
+
+def _render_diff_json(result) -> None:
+    def _trace_dict(t) -> dict:
+        return {
+            "id": t.id,
+            "task": t.task,
+            "status": t.status,
+            "started_at": t.started_at.isoformat(),
+            "step_count": t.step_count,
+            "total_cost_usd": t.total_cost_usd,
+            "total_tokens": t.total_tokens,
+            "total_latency_ms": t.total_latency_ms,
+        }
+
+    def _pair_dict(p) -> dict:
+        d: dict = {"kind": p.kind}
+        if p.step_a is not None:
+            d["action_type_a"] = p.step_a.action_type
+            d["idx_a"] = p.step_a.idx
+            d["cost_a"] = p.cost_a
+        if p.step_b is not None:
+            d["action_type_b"] = p.step_b.action_type
+            d["idx_b"] = p.step_b.idx
+            d["cost_b"] = p.cost_b
+        if p.kind == "equal":
+            d["payload_changed"] = p.payload_changed
+        return d
+
+    output = {
+        "trace_a": _trace_dict(result.trace_a),
+        "trace_b": _trace_dict(result.trace_b),
+        "summary": {
+            "step_count_delta": result.step_count_delta,
+            "cost_delta": round(result.cost_delta, 6),
+            "token_delta": result.token_delta,
+            "latency_delta_ms": result.latency_delta_ms,
+        },
+        "pairs": [_pair_dict(p) for p in result.pairs],
+    }
+    console.print(_json.dumps(output, indent=2))
 
 
 @app.command("config")
