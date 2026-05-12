@@ -158,7 +158,7 @@ export default function StatsPage() {
                       <Bar
                         value={d.total_cost_usd}
                         max={maxDayCost}
-                        color="bg-accent"
+                        color="bg-cyan-400"
                       />
                     </td>
                     <td className="px-4 py-3 text-right mono text-fg-muted">
