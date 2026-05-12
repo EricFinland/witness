@@ -20,7 +20,7 @@ function Bar({ value, max, color }: { value: number; max: number; color: string 
   );
 }
 
-export default function StatsPage() {
+function StatsPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["stats"],
     queryFn: () => api.getStats(30),
@@ -33,15 +33,23 @@ export default function StatsPage() {
     );
 
   const { totals, by_model, by_day } = data;
-  const maxModelCost = by_model[0]?.total_cost_usd ?? 1;
-  const maxDayCost = Math.max(...by_day.map((d) => d.total_cost_usd), 1);
+  const maxModelCost = by_model.reduce((m, r) => Math.max(m, r.total_cost_usd), 1);
+  const maxDayCost = by_day.reduce((m, d) => Math.max(m, d.total_cost_usd), 1);
+
+  if (totals.trace_count === 0) {
+    return (
+      <div className="max-w-3xl mx-auto px-6 py-8">
+        <p className="text-sm text-zinc-500">No traces yet. Run an instrumented agent first.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto px-6 py-8 space-y-10">
       {/* Totals */}
       <section>
         <h2 className="text-xs font-semibold text-fg-subtle uppercase tracking-wider mb-4">
-          Total
+          Totals
         </h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           {[
@@ -172,11 +180,6 @@ export default function StatsPage() {
         </section>
       )}
 
-      {totals.trace_count === 0 && (
-        <p className="text-sm text-fg-muted">
-          No traces yet. Run an instrumented agent first.
-        </p>
-      )}
     </div>
   );
 }
