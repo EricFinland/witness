@@ -46,6 +46,26 @@ class LLMCallOut(BaseModel):
     ts: datetime
 
 
+class ModelStatOut(BaseModel):
+    model: str
+    trace_count: int
+    total_cost_usd: float
+    total_tokens: int
+
+
+class DayStatOut(BaseModel):
+    date: str
+    trace_count: int
+    total_cost_usd: float
+    total_tokens: int
+
+
+class StatsOut(BaseModel):
+    totals: dict
+    by_model: list[ModelStatOut]
+    by_day: list[DayStatOut]
+
+
 class StepOut(BaseModel):
     id: int
     idx: int
@@ -151,6 +171,40 @@ def create_app() -> FastAPI:
                 error=t.error,
                 steps=out_steps,
             )
+
+    @app.get("/api/stats")
+    def get_stats(days: int = 30) -> StatsOut:
+        from witness.stats import compute_stats
+        result = compute_stats(days=days)
+        return StatsOut(
+            totals={
+                "trace_count": result.trace_count,
+                "success_count": result.success_count,
+                "error_count": result.error_count,
+                "total_cost_usd": result.total_cost_usd,
+                "total_tokens": result.total_tokens,
+                "avg_cost_usd": result.avg_cost_usd,
+                "avg_tokens": result.avg_tokens,
+            },
+            by_model=[
+                ModelStatOut(
+                    model=m.model,
+                    trace_count=m.trace_count,
+                    total_cost_usd=m.total_cost_usd,
+                    total_tokens=m.total_tokens,
+                )
+                for m in result.by_model
+            ],
+            by_day=[
+                DayStatOut(
+                    date=d.date,
+                    trace_count=d.trace_count,
+                    total_cost_usd=d.total_cost_usd,
+                    total_tokens=d.total_tokens,
+                )
+                for d in result.by_day
+            ],
+        )
 
     @app.get("/api/traces/{trace_id}/blobs/{path:path}")
     def get_blob(trace_id: str, path: str):
