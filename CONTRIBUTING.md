@@ -14,7 +14,7 @@ to get oriented.
 ## Dev setup
 
 ```bash
-git clone https://github.com/ericcatalano/witness
+git clone https://github.com/EricFinland/witness
 cd witness
 
 # Python side

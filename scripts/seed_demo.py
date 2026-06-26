@@ -85,7 +85,7 @@ body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Ro
 
 
 HN_STORIES = [
-    ("Show HN: Witness — observability for browser agents", "github.com/ericcatalano", 842, 2, 186),
+    ("Show HN: Witness — observability for browser agents", "github.com/EricFinland", 842, 2, 186),
     ("The quiet death of Ruby's test-driven-development", "jamesmagnus.com", 514, 11, 412),
     ("Why LLM agents hit a wall at 20 steps", "anthropic.com", 488, 4, 221),
     ("Bun 2.0 released: single-binary Node.js killer", "bun.sh", 412, 3, 308),
@@ -143,7 +143,7 @@ def render_hn(highlight_idx: int | None = None, clicked: bool = False) -> str:
 def render_gmail(focused_row: int | None = None, archived: int | None = None) -> str:
     inbox = [
         ("Stripe", "Receipt from your payment (#in_3P...k9A)", "9:14 AM", True),
-        ("GitHub", "[ericcatalano/witness] PR #12: add OTEL bridge", "8:02 AM", True),
+        ("GitHub", "[EricFinland/witness] PR #12: add OTEL bridge", "8:02 AM", True),
         ("Linear", "[ENG-342] Trace ingest backpressure on 1M steps", "7:18 AM", False),
         ("Anthropic billing", "Your April invoice is ready", "Apr 17", True),
         ("Vercel", "Deployment succeeded: witness.site@main", "Apr 17", False),
