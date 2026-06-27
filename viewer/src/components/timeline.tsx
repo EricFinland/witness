@@ -1,14 +1,16 @@
 import type { Step } from "@/lib/types";
 import { actionLabel, cn, formatLatency } from "@/lib/utils";
-import { CircleDot, AlertCircle } from "lucide-react";
+import { CircleDot, AlertCircle, ShieldAlert } from "lucide-react";
 
 interface Props {
   steps: Step[];
   selectedIdx: number;
   onSelect: (idx: number) => void;
+  // Step ids carrying an injection/exfil finding, to flag with a warning icon.
+  warnSteps?: Set<number>;
 }
 
-export function Timeline({ steps, selectedIdx, onSelect }: Props) {
+export function Timeline({ steps, selectedIdx, onSelect, warnSteps }: Props) {
   const maxLatency = Math.max(1, ...steps.map((s) => s.latency_ms));
 
   return (
@@ -29,6 +31,7 @@ export function Timeline({ steps, selectedIdx, onSelect }: Props) {
           // CSS so zero-latency steps don't completely vanish.
           const pct = Math.max(1, (s.latency_ms / maxLatency) * 100);
           const active = s.idx === selectedIdx;
+          const warn = warnSteps?.has(s.id);
           return (
             <li key={s.id}>
               <button
@@ -57,6 +60,13 @@ export function Timeline({ steps, selectedIdx, onSelect }: Props) {
                   >
                     {actionLabel(s.action_type)}
                   </span>
+                  {warn && (
+                    <ShieldAlert
+                      size={11}
+                      className="text-amber-400 shrink-0"
+                      aria-label="security finding"
+                    />
+                  )}
                   <span className="mono text-[10.5px] text-fg-subtle shrink-0">
                     {formatLatency(s.latency_ms)}
                   </span>
