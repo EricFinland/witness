@@ -77,6 +77,19 @@ class StatsOut(BaseModel):
     by_day: list[DayStatOut]
 
 
+class FindingOut(BaseModel):
+    id: int
+    trace_id: str
+    step_id: Optional[int]
+    kind: str
+    severity: str
+    score: float
+    title: str
+    detail: str
+    evidence: dict
+    created_at: datetime
+
+
 class StepOut(BaseModel):
     id: int
     idx: int
@@ -96,6 +109,7 @@ class StepOut(BaseModel):
 class TraceDetail(TraceSummary):
     error: Optional[str]
     steps: list[StepOut]
+    findings: list[FindingOut] = []
 
 
 # --- app ---------------------------------------------------------------------
@@ -110,7 +124,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-        allow_methods=["GET"],
+        allow_methods=["GET", "POST"],
         allow_headers=["*"],
     )
 
@@ -168,6 +182,14 @@ def create_app() -> FastAPI:
                         ],
                     )
                 )
+            findings = s.exec(
+                select(storage.Finding)
+                .where(storage.Finding.trace_id == trace_id)
+                .order_by(storage.Finding.id)
+            ).all()
+            out_findings = [
+                FindingOut.model_validate(f, from_attributes=True) for f in findings
+            ]
             return TraceDetail(
                 id=t.id,
                 task=t.task,
@@ -181,7 +203,30 @@ def create_app() -> FastAPI:
                 step_count=t.step_count,
                 error=t.error,
                 steps=out_steps,
+                findings=out_findings,
             )
+
+    @app.get("/api/traces/{trace_id}/findings", response_model=list[FindingOut])
+    def get_findings(trace_id: str) -> list[FindingOut]:
+        with storage.get_session() as s:
+            if s.get(storage.Trace, trace_id) is None:
+                raise HTTPException(404, "trace not found")
+            rows = s.exec(
+                select(storage.Finding)
+                .where(storage.Finding.trace_id == trace_id)
+                .order_by(storage.Finding.id)
+            ).all()
+            return [FindingOut.model_validate(f, from_attributes=True) for f in rows]
+
+    @app.post("/api/traces/{trace_id}/analyze", response_model=list[FindingOut])
+    def analyze_trace(trace_id: str) -> list[FindingOut]:
+        from witness.analysis import runner
+
+        with storage.get_session() as s:
+            if s.get(storage.Trace, trace_id) is None:
+                raise HTTPException(404, "trace not found")
+        findings = runner.run_analysis(trace_id)
+        return [FindingOut.model_validate(f, from_attributes=True) for f in findings]
 
     @app.get("/api/stats")
     def get_stats(days: int = Query(default=30, ge=1, le=365)) -> StatsOut:

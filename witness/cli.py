@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json as _json
 import shutil
-import sys
 import threading
 import time
 import webbrowser
@@ -471,6 +470,104 @@ def _stats_render_json(result) -> None:
         ],
     }
     console.print(_json.dumps(output, indent=2), markup=False)
+
+
+@app.command()
+def analyze(
+    trace_id: Optional[str] = typer.Argument(None, help="Trace id, or omit with --all."),
+    all_: bool = typer.Option(False, "--all", help="Analyze every trace."),
+) -> None:
+    """Run analyzers over a trace (or every trace with --all) and store findings."""
+    from witness.analysis import runner
+
+    storage.init_db()
+
+    if all_:
+        counts = runner.run_all()
+        if not counts:
+            console.print("[dim]No traces to analyze.[/dim]")
+            return
+        total = sum(counts.values())
+        table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
+        table.add_column("Trace", style="cyan", no_wrap=True)
+        table.add_column("Findings", justify="right")
+        for tid, n in counts.items():
+            table.add_row(tid, str(n))
+        console.print(table)
+        console.print(
+            f"[green]Analyzed {len(counts)} traces, {total} findings total.[/green]"
+        )
+        return
+
+    if not trace_id:
+        console.print("[red]Pass a trace id or use --all.[/red]")
+        raise typer.Exit(1)
+
+    findings = runner.run_analysis(trace_id)
+    if not findings:
+        console.print(f"[dim]No findings for {trace_id}.[/dim]")
+        return
+
+    table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
+    table.add_column("Kind", style="cyan")
+    table.add_column("Severity")
+    table.add_column("Score", justify="right")
+    table.add_column("Title")
+    sev_color = {
+        "critical": "red",
+        "high": "red",
+        "medium": "yellow",
+        "low": "blue",
+        "info": "dim",
+    }
+    for f in findings:
+        color = sev_color.get(f.severity, "white")
+        table.add_row(
+            f.kind,
+            f"[{color}]{f.severity}[/{color}]",
+            f"{f.score:.2f}",
+            (f.title or "")[:60],
+        )
+    console.print(table)
+    console.print(f"[green]{len(findings)} findings for {trace_id}.[/green]")
+
+
+@app.command()
+def bench(
+    suite: Optional[str] = typer.Argument(None, help="Benchmark suite to run."),
+    json_out: bool = typer.Option(False, "--json", help="Output results as JSON."),
+) -> None:
+    """Run a benchmark suite against instrumented agents."""
+    storage.init_db()
+    try:
+        from witness import bench as bench_mod
+    except ImportError:
+        console.print(
+            "[yellow]Benchmarking is not available in this build.[/yellow]"
+        )
+        raise typer.Exit(1)
+    code = bench_mod.run_bench(suite=suite, json_out=json_out)
+    if code:
+        raise typer.Exit(code)
+
+
+@app.command()
+def report(
+    trace_id: Optional[str] = typer.Argument(None, help="Trace id to report on."),
+    out: Optional[str] = typer.Option(None, "--out", help="Write the report to a file."),
+) -> None:
+    """Generate a human-readable report for a trace."""
+    storage.init_db()
+    try:
+        from witness import report as report_mod
+    except ImportError:
+        console.print(
+            "[yellow]Reporting is not available in this build.[/yellow]"
+        )
+        raise typer.Exit(1)
+    code = report_mod.write_report(trace_id=trace_id, out=out)
+    if code:
+        raise typer.Exit(code)
 
 
 @app.command("config")
