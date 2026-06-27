@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -64,6 +64,22 @@ class LLMCall(SQLModel, table=True):
     prompt: str = Field(default="", sa_column=Column(Text))
     response: str = Field(default="", sa_column=Column(Text))
     ts: datetime
+
+
+class Finding(SQLModel, table=True):
+    """A single analysis result attached to a trace (and optionally a step)."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    trace_id: str = Field(foreign_key="trace.id", index=True)
+    # None means the finding is trace-level rather than tied to one step.
+    step_id: Optional[int] = Field(default=None, foreign_key="step.id", index=True)
+    kind: str = Field(index=True)  # one of the KIND_* constants in analysis/base.py
+    severity: str = "info"  # "info"|"low"|"medium"|"high"|"critical"
+    score: float = 0.0  # 0.0..1.0 confidence/severity score
+    title: str = ""
+    detail: str = Field(default="", sa_column=Column(Text))
+    evidence: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 _engine = None

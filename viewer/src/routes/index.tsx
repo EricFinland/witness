@@ -1,8 +1,9 @@
+import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { formatCost, formatLatency, formatRelative, formatTokens } from "@/lib/utils";
-import { CheckCircle2, Circle, XCircle, Loader2 } from "lucide-react";
+import { cn, formatCost, formatLatency, formatRelative, formatTokens } from "@/lib/utils";
+import { CheckCircle2, Circle, XCircle, Loader2, Search } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   component: TraceList,
@@ -34,12 +35,39 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
+type StatusFilter = "all" | "success" | "error" | "running";
+
 function TraceList() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["traces"],
     queryFn: api.listTraces,
     refetchInterval: 5000,
   });
+
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<StatusFilter>("all");
+  const [hasInjection, setHasInjection] = useState(false);
+  const [minCost, setMinCost] = useState(0);
+
+  // The list payload carries cost; max bounds the slider. Injection presence is
+  // not in the list payload, so that toggle is gated with a tooltip note rather
+  // than over-fetching findings for every trace.
+  const maxCost = useMemo(
+    () => (data ? data.reduce((m, t) => Math.max(m, t.total_cost_usd), 0) : 0),
+    [data],
+  );
+
+  const filtered = useMemo(() => {
+    if (!data) return [];
+    const q = search.trim().toLowerCase();
+    return data.filter((t) => {
+      if (status !== "all" && t.status !== status) return false;
+      if (minCost > 0 && t.total_cost_usd < minCost) return false;
+      if (q && !t.task.toLowerCase().includes(q) && !t.id.toLowerCase().includes(q))
+        return false;
+      return true;
+    });
+  }, [data, search, status, minCost]);
 
   return (
     <div className="max-w-[1400px] mx-auto px-6 py-8">
@@ -51,9 +79,25 @@ function TraceList() {
           </p>
         </div>
         <div className="text-xs text-fg-subtle font-mono">
-          {data ? `${data.length} trace${data.length === 1 ? "" : "s"}` : ""}
+          {data
+            ? `${filtered.length} / ${data.length} trace${data.length === 1 ? "" : "s"}`
+            : ""}
         </div>
       </div>
+
+      {data && data.length > 0 && (
+        <FilterBar
+          search={search}
+          setSearch={setSearch}
+          status={status}
+          setStatus={setStatus}
+          hasInjection={hasInjection}
+          setHasInjection={setHasInjection}
+          minCost={minCost}
+          setMinCost={setMinCost}
+          maxCost={maxCost}
+        />
+      )}
 
       {isLoading && <Skeletons />}
       {error && (
@@ -72,7 +116,13 @@ function TraceList() {
         </div>
       )}
 
-      {data && data.length > 0 && (
+      {data && data.length > 0 && filtered.length === 0 && (
+        <div className="rounded-md border border-border border-dashed p-12 text-center">
+          <p className="text-fg-muted text-sm">No traces match the current filters.</p>
+        </div>
+      )}
+
+      {data && filtered.length > 0 && (
         <div className="rounded-lg border border-border overflow-hidden bg-bg-card">
           <table className="w-full text-sm">
             <thead className="bg-bg-muted/50 border-b border-border">
@@ -88,7 +138,7 @@ function TraceList() {
               </tr>
             </thead>
             <tbody>
-              {data.map((t) => (
+              {filtered.map((t) => (
                 <tr
                   key={t.id}
                   className="border-t border-border hover:bg-bg-muted/60 transition-colors"
@@ -132,6 +182,97 @@ function TraceList() {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+function FilterBar({
+  search,
+  setSearch,
+  status,
+  setStatus,
+  hasInjection,
+  setHasInjection,
+  minCost,
+  setMinCost,
+  maxCost,
+}: {
+  search: string;
+  setSearch: (v: string) => void;
+  status: StatusFilter;
+  setStatus: (v: StatusFilter) => void;
+  hasInjection: boolean;
+  setHasInjection: (v: boolean) => void;
+  minCost: number;
+  setMinCost: (v: number) => void;
+  maxCost: number;
+}) {
+  const statuses: StatusFilter[] = ["all", "success", "error", "running"];
+  const sliderMax = maxCost > 0 ? maxCost : 0.01;
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-3">
+      {/* Search */}
+      <div className="relative flex-1 min-w-[220px]">
+        <Search
+          size={13}
+          className="absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-subtle pointer-events-none"
+        />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search task or id…"
+          className="w-full rounded-md border border-border bg-bg-card pl-8 pr-3 py-1.5 text-sm text-fg placeholder:text-fg-subtle focus:outline-none focus:border-border-muted"
+        />
+      </div>
+
+      {/* Status segmented control */}
+      <div className="inline-flex rounded-md border border-border overflow-hidden bg-bg-card">
+        {statuses.map((s) => (
+          <button
+            key={s}
+            onClick={() => setStatus(s)}
+            className={cn(
+              "px-2.5 py-1.5 text-xs capitalize transition-colors border-l border-border first:border-l-0",
+              status === s
+                ? "bg-bg-muted text-fg"
+                : "text-fg-muted hover:text-fg",
+            )}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+
+      {/* Injection toggle (gated: findings are not in the list payload) */}
+      <label
+        className="inline-flex items-center gap-1.5 text-xs text-fg-subtle cursor-not-allowed select-none"
+        title="Per-trace findings are not loaded in the list view. Open a trace to see injection findings."
+      >
+        <input
+          type="checkbox"
+          checked={hasInjection}
+          onChange={(e) => setHasInjection(e.target.checked)}
+          disabled
+          className="accent-accent"
+        />
+        Has injection
+      </label>
+
+      {/* Min cost */}
+      <div className="inline-flex items-center gap-2 text-xs text-fg-muted">
+        <span className="whitespace-nowrap">Min cost</span>
+        <input
+          type="range"
+          min={0}
+          max={sliderMax}
+          step={sliderMax / 100 || 0.0001}
+          value={Math.min(minCost, sliderMax)}
+          onChange={(e) => setMinCost(Number(e.target.value))}
+          className="w-28 accent-accent"
+        />
+        <span className="mono text-fg w-14 text-right">{formatCost(minCost)}</span>
+      </div>
     </div>
   );
 }

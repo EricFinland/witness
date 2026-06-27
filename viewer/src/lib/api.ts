@@ -1,9 +1,15 @@
-import type { TraceSummary, TraceDetail, Stats } from "./types";
+import type { TraceSummary, TraceDetail, Stats, Finding } from "./types";
 
 const BASE = "";
 
 async function j<T>(url: string): Promise<T> {
   const r = await fetch(BASE + url);
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  return r.json();
+}
+
+async function post<T>(url: string): Promise<T> {
+  const r = await fetch(BASE + url, { method: "POST" });
   if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
   return r.json();
 }
@@ -19,4 +25,6 @@ export const api = {
     return r.text();
   },
   getStats: (days = 30) => j<Stats>(`/api/stats?days=${days}`),
+  getFindings: (id: string) => j<Finding[]>(`/api/traces/${id}/findings`),
+  runAnalysis: (id: string) => post<Finding[]>(`/api/traces/${id}/analyze`),
 };

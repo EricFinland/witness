@@ -1,0 +1,98 @@
+# Reusable workflow: post a witness trace summary as a PR comment.
+#
+# A caller workflow runs an agent task that produces a witness trace (stored in
+# WITNESS_DIR), then calls this workflow. It renders a compact markdown summary
+# for the chosen trace (or the latest one) and posts it as a sticky PR comment.
+#
+# Example caller:
+#
+#   jobs:
+#     trace-summary:
+#       uses: ./.github/workflows/witness-trace.yml
+#       with:
+#         trace_id: ""          # empty -> use the latest trace
+#         witness_dir: .witness # where the trace db/blobs live
+#
+name: witness-trace
+
+on:
+  workflow_call:
+    inputs:
+      trace_id:
+        description: "Trace id to summarize. Leave empty to use the latest trace."
+        required: false
+        type: string
+        default: ""
+      witness_dir:
+        description: "Directory holding the witness database and trace blobs."
+        required: false
+        type: string
+        default: ".witness"
+      python_version:
+        description: "Python version to run with."
+        required: false
+        type: string
+        default: "3.12"
+
+# Needed so the job can write a comment back onto the pull request.
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    env:
+      # storage.py reads WITNESS_DIR to locate the trace database and blobs.
+      WITNESS_DIR: ${{ inputs.witness_dir }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Install witness
+        run: python -m pip install --upgrade pip && pip install -e .
+
+      # Render the markdown summary. scripts/witness_pr_comment.py prints it to
+      # stdout; we stash it in a file so the comment step can read it verbatim.
+      - name: Render trace summary
+        id: summary
+        run: |
+          python scripts/witness_pr_comment.py "${{ inputs.trace_id }}" > witness-summary.md
+          cat witness-summary.md
+
+      # Only post when this run is attached to a pull request.
+      - name: Post PR comment
+        if: ${{ github.event_name == 'pull_request' || github.event.pull_request != null }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('witness-summary.md', 'utf8');
+            const marker = '<!-- witness-trace-summary -->';
+            const issue_number = context.payload.pull_request.number;
+            const { owner, repo } = context.repo;
+
+            // Reuse a single sticky comment instead of stacking new ones.
+            const existing = await github.paginate(
+              github.rest.issues.listComments,
+              { owner, repo, issue_number }
+            );
+            const mine = existing.find(
+              (c) => c.body && c.body.includes(marker)
+            );
+            const fullBody = `${marker}\n${body}`;
+
+            if (mine) {
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: mine.id, body: fullBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number, body: fullBody,
+              });
+            }

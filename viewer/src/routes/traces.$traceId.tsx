@@ -1,15 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   CheckCircle2,
   Loader2,
   XCircle,
   AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import type { Step } from "@/lib/types";
+import type { Finding, Step, TraceDetail as TraceDetailType } from "@/lib/types";
 import {
   actionLabel,
   cn,
@@ -17,7 +18,15 @@ import {
   formatLatency,
   formatTokens,
 } from "@/lib/utils";
+import {
+  healthBand,
+  scoreToPercent,
+  stepWarnings,
+  traceLevelFinding,
+} from "@/lib/findings";
 import { Timeline } from "@/components/timeline";
+import { TimelineScrubber } from "@/components/timeline-scrubber";
+import { FindingsPanel } from "@/components/findings-panel";
 import { ScreenshotDiff } from "@/components/screenshot-diff";
 import { DomDiff } from "@/components/dom-diff";
 import { LLMCallsPanel } from "@/components/llm-calls-panel";
@@ -27,20 +36,56 @@ export const Route = createFileRoute("/traces/$traceId")({
   component: TraceDetail,
 });
 
-type Tab = "screenshots" | "dom" | "action" | "llm";
+type Tab = "screenshots" | "dom" | "action" | "llm" | "findings";
 
 function TraceDetail() {
   const { traceId } = Route.useParams();
+  const queryClient = useQueryClient();
   const { data, isLoading, error } = useQuery({
     queryKey: ["trace", traceId],
     queryFn: () => api.getTrace(traceId),
     refetchInterval: (q) => (q.state.data?.status === "running" ? 2000 : false),
   });
 
+  // Prefer findings on the trace payload; fall back to a dedicated fetch so the
+  // panel works whether or not the detail endpoint embeds them.
+  const { data: fetchedFindings } = useQuery({
+    queryKey: ["findings", traceId],
+    queryFn: () => api.getFindings(traceId),
+    enabled: !data?.findings,
+  });
+  const findings: Finding[] = data?.findings ?? fetchedFindings ?? [];
+
+  const reanalyze = useMutation({
+    mutationFn: () => api.runAnalysis(traceId),
+    onSuccess: (fresh) => {
+      queryClient.setQueryData(["findings", traceId], fresh);
+      queryClient.setQueryData(
+        ["trace", traceId],
+        (prev: TraceDetailType | undefined) =>
+          prev ? { ...prev, findings: fresh } : prev,
+      );
+      queryClient.invalidateQueries({ queryKey: ["trace", traceId] });
+    },
+  });
+
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [tab, setTab] = useState<Tab>("screenshots");
 
   const selected: Step | undefined = data?.steps[selectedIdx];
+
+  const warnSteps = useMemo(
+    () => new Set(stepWarnings(findings).keys()),
+    [findings],
+  );
+
+  const trajectoryFinding = traceLevelFinding(findings, "trajectory");
+  const outcomeFinding = traceLevelFinding(findings, "outcome");
+
+  const jumpToStep = (idx: number) => {
+    setSelectedIdx(idx);
+    setTab("screenshots");
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -52,6 +97,7 @@ function TraceDetail() {
       if (e.key === "2") setTab("dom");
       if (e.key === "3") setTab("action");
       if (e.key === "4") setTab("llm");
+      if (e.key === "5") setTab("findings");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -83,6 +129,36 @@ function TraceDetail() {
               {data.task}
             </p>
           </div>
+          {trajectoryFinding && (
+            <ScoreBadge
+              label="Trajectory"
+              finding={trajectoryFinding}
+              title="Trajectory health from analysis"
+            />
+          )}
+          {outcomeFinding && (
+            <ScoreBadge
+              label="Outcome"
+              finding={outcomeFinding}
+              title="Outcome / risk from analysis"
+            />
+          )}
+          <button
+            onClick={() => reanalyze.mutate()}
+            disabled={reanalyze.isPending}
+            className={cn(
+              "shrink-0 inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs",
+              "text-fg-muted hover:text-fg hover:border-border-muted transition-colors",
+              "disabled:opacity-60 disabled:cursor-not-allowed",
+            )}
+            title="Re-run the analysis for this trace"
+          >
+            <RefreshCw
+              size={12}
+              className={reanalyze.isPending ? "animate-spin" : ""}
+            />
+            {reanalyze.isPending ? "Analyzing…" : "Re-analyze"}
+          </button>
         </div>
         <div className="mx-auto max-w-[1600px] px-5 pb-2.5 flex items-center gap-6 text-xs">
           <Metric label="Model" value={<span className="mono">{data.model ?? "—"}</span>} />
@@ -99,6 +175,11 @@ function TraceDetail() {
             label="Tokens"
             value={<span className="mono">{formatTokens(data.total_tokens)}</span>}
           />
+          {reanalyze.isError && (
+            <span className="text-danger text-[11px]">
+              Analysis failed: {(reanalyze.error as Error).message}
+            </span>
+          )}
         </div>
       </div>
 
@@ -108,13 +189,25 @@ function TraceDetail() {
           steps={data.steps}
           selectedIdx={selectedIdx}
           onSelect={setSelectedIdx}
+          warnSteps={warnSteps}
         />
 
         <div className="flex-1 flex flex-col min-w-0">
+          <TimelineScrubber
+            steps={data.steps}
+            selectedIdx={selectedIdx}
+            onSelect={setSelectedIdx}
+            warnSteps={warnSteps}
+          />
           {selected ? (
             <>
               <StepHeader step={selected} />
-              <TabBar tab={tab} setTab={setTab} llmCount={selected.llm_calls.length} />
+              <TabBar
+                tab={tab}
+                setTab={setTab}
+                llmCount={selected.llm_calls.length}
+                findingCount={findings.length}
+              />
               <div className="flex-1 min-h-0 overflow-auto bg-bg-muted/30">
                 <div className="mx-auto max-w-[1400px]">
                   {tab === "screenshots" && (
@@ -123,6 +216,15 @@ function TraceDetail() {
                   {tab === "dom" && <DomDiff traceId={data.id} step={selected} />}
                   {tab === "action" && <ActionPanel step={selected} />}
                   {tab === "llm" && <LLMCallsPanel step={selected} />}
+                  {tab === "findings" && (
+                    <div className="p-5">
+                      <FindingsPanel
+                        findings={findings}
+                        steps={data.steps}
+                        onJumpToStep={jumpToStep}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             </>
@@ -143,6 +245,35 @@ function Metric({ label, value }: { label: string; value: React.ReactNode }) {
       <span className="text-fg-subtle text-[10.5px] uppercase tracking-wider">{label}</span>
       <span className="text-fg">{value}</span>
     </div>
+  );
+}
+
+function ScoreBadge({
+  label,
+  finding,
+  title,
+}: {
+  label: string;
+  finding: Finding;
+  title?: string;
+}) {
+  const band = healthBand(finding.score);
+  const pct = scoreToPercent(finding.score);
+  return (
+    <span
+      className={cn(
+        "shrink-0 inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs",
+        band.border,
+        band.bg,
+      )}
+      title={title ?? finding.title}
+    >
+      <span className={cn("h-1.5 w-1.5 rounded-full", band.dot)} />
+      <span className="text-fg-subtle text-[10.5px] uppercase tracking-wider">
+        {label}
+      </span>
+      <span className={cn("mono font-medium", band.text)}>{pct}%</span>
+    </span>
   );
 }
 
@@ -195,16 +326,24 @@ function TabBar({
   tab,
   setTab,
   llmCount,
+  findingCount,
 }: {
   tab: Tab;
   setTab: (t: Tab) => void;
   llmCount: number;
+  findingCount: number;
 }) {
   const tabs: { id: Tab; label: string; hint: string; badge?: number }[] = [
     { id: "screenshots", label: "Screenshots", hint: "1" },
     { id: "dom", label: "DOM Diff", hint: "2" },
     { id: "action", label: "Action", hint: "3" },
     { id: "llm", label: "LLM Calls", hint: "4", badge: llmCount || undefined },
+    {
+      id: "findings",
+      label: "Findings",
+      hint: "5",
+      badge: findingCount || undefined,
+    },
   ];
   return (
     <div className="border-b border-border bg-bg flex items-center px-5 gap-1 shrink-0">

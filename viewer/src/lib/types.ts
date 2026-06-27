@@ -39,9 +39,23 @@ export interface Step {
   llm_calls: LLMCall[];
 }
 
+export interface Finding {
+  id: number;
+  trace_id: string;
+  step_id: number | null;
+  kind: string;
+  severity: "info" | "low" | "medium" | "high" | "critical";
+  score: number;
+  title: string;
+  detail: string;
+  evidence: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface TraceDetail extends TraceSummary {
   error: string | null;
   steps: Step[];
+  findings?: Finding[];
 }
 
 export interface ModelStat {
