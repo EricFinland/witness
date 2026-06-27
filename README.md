@@ -73,6 +73,51 @@ Everything is stored locally in SQLite + flat files under `~/.witness/`. Nothing
 
 ---
 
+## Intelligence layer
+
+Capture tells you what the agent did. The intelligence layer tells you whether it
+was safe and on-track. Run `witness analyze <trace_id>` (or `--all`) and the
+findings show up in the viewer, over the API, and in the terminal.
+
+- **Prompt-injection detection** flags indirect prompt injection: it fires on the
+  conjunction of injection-shaped content in the captured DOM (instruction text
+  aimed at an agent, hidden or offscreen text, exfiltration-shaped URLs) and a
+  deviating next action that obeys the injection or drifts off task. Benign pages
+  do not produce false highs.
+- **Trajectory health** scores the step sequence for loops/thrash, task drift
+  (stdlib lexical similarity, no embeddings), wasted/dead-end steps, and
+  backtracking, then rolls them into one health badge per trace.
+- **Outcome / risk prediction** estimates the probability a (possibly partial)
+  run will succeed using a transparent heuristic over cheap features, with an
+  optional ML training harness behind the `[ml]` extra to learn a real classifier
+  from labelled runs.
+- **PII / secret exfiltration detection** catches credentials and PII typed into
+  page fields and DOM-to-action carry-over, with every matched value masked in
+  the stored evidence.
+
+Findings are stored as a versioned `Finding` model (kind, severity, score, title,
+detail, evidence) and served at `GET /api/traces/{id}/findings` and `POST
+/api/traces/{id}/analyze`. Details in [`docs/analysis.md`](docs/analysis.md).
+
+Around the analyzers:
+
+- **Schema-first capture adapters** - a single versioned capture schema
+  (`witness/schema.py`, `SCHEMA_VERSION`) plus an adapter registry under
+  `witness/adapters/` so new frameworks plug in without touching storage, the
+  analyzers, or the viewer. browser_use is fully instrumented; Playwright is
+  scaffolded. See [`docs/schema.md`](docs/schema.md).
+- **Reliability harness** - `witness bench` and the WitnessBench reference tasks
+  run a task repeatedly and report success rate, flakiness, metric distributions,
+  and trajectory divergence. See [`docs/bench.md`](docs/bench.md).
+- **HTML report exporter + GitHub Action** - `witness report` writes a
+  self-contained HTML report for a trace, and a reusable workflow posts a trace
+  summary as a sticky PR comment.
+- **OTLP export** - set `WITNESS_OTLP_ENDPOINT` to forward LLM spans to Jaeger,
+  Grafana, or Honeycomb with OpenTelemetry GenAI semantic-convention attributes,
+  while local capture keeps working. See [`docs/otel-export.md`](docs/otel-export.md).
+
+---
+
 ## Screenshots
 
 ![trace list](docs/screenshots/01_list.png)
@@ -114,6 +159,12 @@ witness view              # open the viewer at localhost:7842
 witness ls                # list recent traces in the terminal
 witness rm <trace_id>     # delete a single trace
 witness rm --all          # delete every trace (asks first)
+witness analyze <id>      # run the analyzers and store findings (--all for every trace)
+witness bench [suite]     # reliability report across captured runs
+witness report <id>       # write a self-contained HTML report for a trace
+witness diff a b          # compare two traces step-by-step
+witness stats             # aggregate cost and token usage
+witness share <id>        # upload a trace to a hosted viewer
 witness config            # show config path and current settings
 ```
 
@@ -125,10 +176,10 @@ Telemetry is off by default and there is no toggle to turn it on. Witness never 
 
 Short list of what's coming, roughly in order:
 
-- **Share links** — `witness share <trace_id>` uploads a trace to a hosted viewer so you can paste it into a bug report or a Slack thread
-- **More frameworks** — Playwright-based agents first, then Claude in Chrome event streams
-- **Regression detection** — run the same task against two model versions, diff the traces, alert on drift
-- **Cost dashboards** — aggregate spend across traces and tasks
+- **More frameworks** - finish Playwright instrumentation, then Claude in Chrome event streams
+- **Real-time streaming viewer** - watch a running agent step-by-step as it executes
+- **Pre-trained outcome model** - ship a learned outcome predictor, not just the heuristic and training harness
+- **OpenAI / Bedrock / Gemini** - full pricing and testing for the providers OpenLLMetry already instruments
 
 Full backlog: [`BACKLOG.md`](BACKLOG.md)
 
